@@ -2,10 +2,16 @@
 
 ## 使用示例：
 
+### 安装：
+
+```
+npm i kaiheila-ws
+```
+
 ### WebSocket (v3)：
 
 ```JavaScript
-import { KaiheilaWS } from './index.js'
+import { KaiheilaWS } from 'kaiheila-ws'
 let kaiheiws = new KaiheilaWS({
     ver: 3,
     v3: {
@@ -19,7 +25,7 @@ kaiheiws.connect()
 ### WebSocket (v2)：
 
 ```JavaScript
-import { KaiheilaWS } from './index.js'
+import { KaiheilaWS } from 'kaiheila-ws'
 let kaiheiws = new KaiheilaWS({
     ver: 2,
     v2: {
