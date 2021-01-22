@@ -406,11 +406,14 @@ export class KaiheilaWS extends EventEmitter {
     }
     async sendmsg(content = "", channel_id = "", quote = "", type = 1) {
         let [msg, Extra, request] = [{}, {}, this.creatRequest("sendmsg")]
-        if (this.config.ver3) msg = {
-            channel_id,
-            content,
-            quote,
-            type
+        if (this.config.ver3) {
+            msg = {
+                channel_id,
+                content,
+                type
+            }
+            if(quote!=="") msg.quote = quote
+            request.data = msg
         }
         else {
             Extra = this.createExtra(channel_id)
@@ -422,6 +425,7 @@ export class KaiheilaWS extends EventEmitter {
                 auth: this.#wsRequest.sessionId
             }
             request.url += channel_id + "/message"
+            request.data = msg
         }
         await this.#runList.Push()
         const r = await axios(request)
