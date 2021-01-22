@@ -395,10 +395,10 @@ export class KaiheilaWS extends EventEmitter {
             }
         })
         this.#wsRequest.ws.on("close", e => {
+            if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
+            this.#wsRequest.wsInterval = null
             if (!this.#wsRequest.realclose) {
                 console.log("正在尝试重连")
-                if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
-                this.#wsRequest.wsInterval = null
                 this.connect()
             }
             else console.log("连接已关闭")
