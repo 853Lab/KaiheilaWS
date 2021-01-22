@@ -495,7 +495,7 @@ export class KaiheilaWS extends EventEmitter {
             return this.#guilds = r.data
         }
     }
-    async setrole(guild_id, user_id, role_id, mode="Grant") {
+    async setrole(guild_id="", user_id="", role_id=0, mode="Grant") {
         // const mode = m === true ? "Grant" : "Revoke"
         let request = this.creatRequest("role" + mode)
         if (this.config.ver3) {
