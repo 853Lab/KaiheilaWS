@@ -4,7 +4,7 @@ import { EventEmitter } from 'events'
 import axios from 'axios'
 import WebSocket from 'ws'
 import pako from 'pako'
-import { Json, JtC } from './init.js'
+import { Json, JtC, RList, randomizator } from './init.js'
 class Config {
     ver = 3
     get ver3() {
@@ -77,16 +77,34 @@ class UserInfo {
 class KaiheilaAPI {
     url = "https://kaiheila.cn/api/"
     me = {
+        mode: "GET",
         v2: "/user/user-state",
         v3: "/user/me"
     }
     gateway = {
+        mode: "GET",
         v2: "/user/user-state",
         v3: "/gateway/index"
     }
     guild = {
+        mode: "GET",
         v2: "/guilds",
         v3: "/guild"
+    }
+    sendmsg = {
+        mode: "POST",
+        v2: "/channels/",
+        v3: "/channel/message"
+    }
+    roleGrant = {
+        mode: "POST",
+        v2: "/guild-roles/grant/",
+        v3: "/guild-role/grant"
+    }
+    roleRevoke = {
+        mode: "POST",
+        v2: "/guild-roles/revoke/",
+        v3: "/guild-role/revoke"
     }
 }
 class Guild {
@@ -106,12 +124,12 @@ class Guild {
     welcome_channel_id = ""
     ws_type = 0
     roles = [{
-        "role_id": 0,
-        "name": "@全体成员",
-        "color": 0,
-        "hoist": 0,
-        "mentionable": 0,
-        "permissions": 147642880
+        role_id: 0,
+        name: "@全体成员",
+        color: 0,
+        hoist: 0,
+        mentionable: 0,
+        permissions: 147642880
     }]
     channels = [{
         "id": "",
@@ -256,6 +274,7 @@ class KaiheilaWsRequest {
     retryhb = 0
     sendheartbeat() {
         if (this.retryhb > 2) {
+            console.log("心跳失败，重连") // 鲁迅：学医救不了国人
             this.realclose = false
             return this.ws.close()
         }
@@ -271,17 +290,20 @@ class KaiheilaWsRequest {
         let time = 6000
         switch (this.retryhb) {
             case 0:
+                console.log("发送心跳")
                 time = 6000
                 break
             case 1:
+                console.log("发送心跳，重试：1")
                 time = 2000
                 break
             case 2:
+                console.log("发送心跳，重试：2")
                 time = 4000
                 break
         }
         this.retryhb++
-        this.wsInterval = setTimeout(this.sendheartbeat, time)
+        this.wsInterval = setTimeout(() => { this.sendheartbeat() }, time)
     }
 }
 class Msg {
@@ -310,6 +332,7 @@ class Msg {
 }
 export class KaiheilaWS extends EventEmitter {
     config = new Config()
+    #runList = new RList()
     get ver() {
         return this.config.ver
     }
@@ -325,57 +348,91 @@ export class KaiheilaWS extends EventEmitter {
         super()
         Object.assign(this.config, config)
     }
-    connect() {
-        this.getGateway().then(() => {
-            this.#wsRequest.ws = new WebSocket(this.#wsurl)
-            // this.#wsRequest.ws.on("open", e => {
-            // })
-            this.#wsRequest.ws.on("message", e => {
-                let n = e
-                let r
-                try {
-                    if (typeof n !== "string") {
-                        let a = new Uint8Array(n)
-                        n = pako.inflate(a, {
-                            to: "string"
-                        })
-                    }
-                } catch (o) {
-                    console.log(o)
-                }
-                r = Json.parse(n)
-                // console.log(r)
-                switch (r.s) {
-                    case 0:
-                        if (typeof r.sn == "number" && r.sn > this.#wsRequest.sn) this.#wsRequest.sn = r.sn
-                        this.emit("Message", new Msg(r.d,this.config.ver2))
-                        break
-                    case 1:
-                        if (r?.d?.sessionId) this.#wsRequest.sessionId = r.d.sessionId
-                        break
-                    case 3:
-                        if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
-                        this.#wsRequest.retryhb = 0
-                        this.#wsRequest.wsInterval = setTimeout(this.#wsRequest.sendheartbeat, randomizator(25000, 10000))
-                        // 已接收到心跳，开始以25秒为基础，加上10秒之内的随机数继续发送
-                        break
-                    case 5:
-                        this.#wsRequest.realclose = false
-                        this.#wsRequest.ws.close()
-                        break
-                    default:
-                        break
-                }
-            })
-            this.#wsRequest.ws.on("close", e => {
-                if (!this.#wsRequest.realclose) {
-                    if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
-                    this.#wsRequest.wsInterval = null
-                    this.#wsRequest = new KaiheilaWsRequest()
-                    this.connect()
-                }
-            })
+    async connect() {
+        await this.getGateway()
+        this.#wsRequest = new KaiheilaWsRequest()
+        this.#wsRequest.ws = new WebSocket(this.#wsurl)
+        this.#wsRequest.ws.on("open", e => {
+            console.log("连接已打开")
+            this.#wsRequest.wsInterval = setTimeout(() => { this.#wsRequest.sendheartbeat() }, randomizator(25000, 10000))
         })
+        this.#wsRequest.ws.on("message", e => {
+            let n = e
+            let r
+            try {
+                if (typeof n !== "string") {
+                    let a = new Uint8Array(n)
+                    n = pako.inflate(a, {
+                        to: "string"
+                    })
+                }
+            } catch (o) {
+                console.log(o)
+            }
+            r = Json.parse(n)
+            // console.log(r)
+            switch (r.s) {
+                case 0:
+                    if (typeof r.sn == "number" && r.sn > this.#wsRequest.sn) this.#wsRequest.sn = r.sn
+                    let msg = new Msg(r.d, this.config.ver2)
+                    this.emit("Message", msg)
+                    break
+                case 1:
+                    if (r?.d?.sessionId) this.#wsRequest.sessionId = r.d.sessionId
+                    break
+                case 3:
+                    if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
+                    this.#wsRequest.retryhb = 0
+                    this.#wsRequest.wsInterval = setTimeout(() => { this.#wsRequest.sendheartbeat() }, randomizator(25000, 10000))
+                    // 已接收到心跳，开始以25秒为基础，加上10秒之内的随机数继续发送
+                    break
+                case 5:
+                    this.#wsRequest.realclose = false
+                    this.#wsRequest.ws.close()
+                    break
+                default:
+                    break
+            }
+        })
+        this.#wsRequest.ws.on("close", e => {
+            if (!this.#wsRequest.realclose) {
+                console.log("正在尝试重连")
+                if (this.#wsRequest.wsInterval) clearTimeout(this.#wsRequest.wsInterval)
+                this.#wsRequest.wsInterval = null
+                this.connect()
+            }
+            else console.log("连接已关闭")
+        })
+    }
+    async sendmsg(content = "", channel_id = "", quote = "", type = 1) {
+        let [msg, Extra, request] = [{}, {}, this.creatRequest("sendmsg")]
+        if (this.config.ver3) msg = {
+            channel_id,
+            content,
+            quote,
+            type
+        }
+        else {
+            Extra = this.createExtra(channel_id)
+            if (typeof quote !== "string") Extra = this.createQuote(channel_id, quote, Extra)
+            const contents = { content, extra: Json.stringify(Extra) }
+            msg = {
+                content: Json.stringify(contents),
+                objectName: 1,
+                auth: this.#wsRequest.sessionId
+            }
+            request.url += channel_id + "/message"
+        }
+        await this.#runList.Push()
+        const r = await axios(request)
+        if (this.config.ver3) {
+            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
+            return r.data.data
+        }
+        else {
+            if (!r.data.msgId) return console.error("请求错误：" + r.data)
+            return r.data
+        }
     }
     reconnect() {
         this.#wsRequest.realclose = false
@@ -387,7 +444,7 @@ export class KaiheilaWS extends EventEmitter {
     creatRequest(api = "") {
         const ver = "v" + this.ver
         let request = {
-            method: "GET",
+            method: this.#api[api].mode,
             url: this.#api.url + ver + this.#api[api][ver],
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) kaiheila/0.0.25 Chrome/80.0.3987.158 Electron/8.2.0 Safari/537.36",
@@ -399,6 +456,7 @@ export class KaiheilaWS extends EventEmitter {
         return request
     }
     async getme() {
+        await this.#runList.Push()
         const r = await axios(this.creatRequest("me"))
         if (this.config.ver3) {
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
@@ -412,6 +470,8 @@ export class KaiheilaWS extends EventEmitter {
         }
     }
     async getGateway() {
+        console.log("获取连接信息")
+        await this.#runList.Push()
         const r = await axios(this.creatRequest("gateway"))
         if (this.config.ver3) {
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
@@ -424,6 +484,7 @@ export class KaiheilaWS extends EventEmitter {
         }
     }
     async getGuild() {
+        await this.#runList.Push()
         const r = await axios(this.creatRequest("guild"))
         if (this.config.ver3) {
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
@@ -433,6 +494,91 @@ export class KaiheilaWS extends EventEmitter {
             if (r.data.code) return console.error("请求错误：" + r.data)
             return this.#guilds = r.data
         }
+    }
+    async setrole(guild_id, user_id, role_id, mode="Grant") {
+        // const mode = m === true ? "Grant" : "Revoke"
+        let request = this.creatRequest("role" + mode)
+        if (this.config.ver3) {
+            request.data = { guild_id, user_id, role_id }
+        }
+        else {
+            request.data = { user_id, role_id }
+            request.url += guild_id
+            request.method = "PATCH"
+        }
+        await this.#runList.Push()
+        const r = await axios(request)
+        if (this.config.ver3) {
+            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
+            return r.data.data
+        }
+        else {
+            if (!r.data.msgId) return console.error("请求错误：" + r.data)
+            return r.data
+        }
+    }
+    getChannel(channel_id) {
+        for (let v = 0; v < this.#guilds.length; v++) {
+            const z = this.#guilds[v]
+            let channels = z.channels
+            if (channels.length == 0) continue
+            for (let i = 0; i < channels.length; i++) {
+                const e = channels[i]
+                if (e.hasOwnProperty("channels") && e.channels.length != 0) {
+                    for (let q = 0; q < e.channels.length; q++) {
+                        const w = e.channels[q]
+                        if (channel_id != w.id) continue
+                        return { guild: z, channel: w }
+                    }
+                }
+                if (channel_id != e.id) continue
+                return { guild: z, channel: e }
+            }
+        }
+        return null
+    }
+    createExtra(channel_id) {
+        const { guild, channel } = getChannel(channel_id)
+        if (!channel) return null
+        return {
+            author: {
+                avatar: this.#user.avatar,
+                id: this.#user.id,
+                identify_num: this.#user.identify_num,
+                nickname: guild.my_nickname,
+                roles: guild.my_roles,
+                username: this.#user.username
+            },
+            channel_name: channel.name,
+            code: "",
+            guild_id: channel_id,
+            mention: [],
+            type: 1
+        }
+    }
+    createQuote(channel_id, quote, Extra) {
+        if (Extra) Extra = this.createExtra(channel_id)
+        Extra.mention.push(quote.extra.author.id)
+        Extra.quote = {
+            id: quote.msg_id,
+            rong_id: quote.msg_id,
+            type: quote.type,
+            content: quote.content,
+            create_at: quote.msg_timestamp,
+            msgId: quote.msg_id,
+            code: "",
+            author: {
+                id: quote.extra.author.id,
+                username: quote.extra.author.username,
+                identify_num: quote.extra.author.identify_num,
+                online: true,
+                os: "Websocket",
+                avatar: quote.extra.author.avatar,
+                nickname: quote.extra.author.nickname,
+                roles: quote.extra.author.roles
+            }
+        }
+        return Extra
     }
 }
 // import { KaiheilaWS } from './index.js'

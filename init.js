@@ -25,3 +25,36 @@ export const JtC = (c, j) => {
     }
     return c
 }
+
+export class RunList {
+    time = 500
+    #list = []
+    Push(callback) {
+        this.#list.push(callback)
+        if (this.#list.length === 1) this.Run()
+    }
+    Run() {
+        if (this.#list.length !== 0) {
+            this.#list[0]()
+            setTimeout(() => {
+                this.#list.splice(0, 1)
+                this.Run()
+            }, this.time)
+        }
+    }
+}
+export class RList{
+    time = 500
+    #list = -1
+    snooze = ms => new Promise(resolve => setTimeout(resolve, ms))
+    async Push(){
+        this.#list++
+        await this.snooze(this.#list*this.time)
+        Promise.resolve().finally(()=>{
+            setTimeout(()=>{this.#list--},this.#list+1)
+        })
+    }
+}
+export const randomizator = (a = 0, b = 0) => {
+    return Math.floor(Math.random() * b) + a
+}
