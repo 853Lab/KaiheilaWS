@@ -51,7 +51,7 @@ export class RList{
         this.#list++
         await this.snooze(this.#list*this.time)
         Promise.resolve().finally(()=>{
-            setTimeout(()=>{this.#list--},this.#list+1)
+            setTimeout(()=>{this.#list--},(this.#list+1)*this.time)
         })
     }
 }

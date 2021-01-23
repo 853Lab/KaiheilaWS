@@ -1,7 +1,7 @@
 {
     "name": "kaiheila-ws",
-    "version": "1.0.4",
-    "description": "开黑啦机器人v2和v3 API的收发SDK",
+    "version": "1.0.5",
+    "description": "开黑啦机器人v2和v3 API的收发SDK，基于ECMAScript",
     "author": "Sonic853 <Sonic853@qq.com> (http://853lab.com)",
     "homepage": "https://github.com/853Lab/KaiheilaWS",
     "repository": {
@@ -21,7 +21,8 @@
     },
     "type": "module",
     "scripts": {
-        "test": "node ./test.js"
+        "test": "node ./test.js",
+        "publish": "npm publish"
     },
     "license": "MIT"
 }
