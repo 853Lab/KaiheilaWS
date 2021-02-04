@@ -55,6 +55,17 @@ export class RList{
         })
     }
 }
+export const returnFileType = (file="") => {
+    let f = file.split(".")
+    if (f.length > 2) {
+        let name = f[0]
+        for (let i = 1; i < f.length - 1; i++) {
+            name += "." + f[i]
+        }
+        return { name, type: f[f.length - 1] }
+    }
+    else return { name: f[0], type: f.length === 1 ? "" : f[1] }
+}
 export const randomizator = (a = 0, b = 0) => {
     return Math.floor(Math.random() * b) + a
 }

@@ -1,18 +1,27 @@
 "use strict"
 // const [{ EventEmitter }, axios, WebSocket, pako, { Json }] = [require('events'), require('axios'), require('ws'), require('pako'), require('./init.js')]
 import { EventEmitter } from 'events'
+import fs from 'fs'
+import FormData from 'form-data'
 import axios from 'axios'
 import WebSocket from 'ws'
 import pako from 'pako'
-import { Json, JtC, RList, randomizator } from './init.js'
+import { Json, JtC, RList, randomizator, returnFileType } from './init.js'
+// {"content":"https://img.kaiheila.cn/assets/2021-02/xxxxxxxxxxxxx.png","imageUri":"https://img.kaiheila.cn/assets/2021-02/xxxxxxxxxxxxx.png","extra":"{\"local_id\":\"HxnSf1GUZLspqrxrwxxxxxxx\",\"type\":\"2\",\"code\":\"\",\"guild_id\":\"7430000066660000\",\"image_name\":\"Alea_a2.png\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
+// objectName: 2
+// {"name":"视频20210204114120.mp4","fileType":"video/mp4","size":3636381,"fileUrl":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","width":1920,"height":1080,"duration":11.133333,"content":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","sightUrl":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","extra":"{\"type\":\"4\",\"guild_id\":\"7430000066660000\",\"code\":\"\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
+// objectName: 3
+// {"content":"https://img.kaiheila.cn/attachments/2021-02/04/601b73789a1f0.zip","name":"apt-cyg-master.zip","type":"application/x-zip-compressed","size":29099,"fileUrl":"https://img.kaiheila.cn/attachments/2021-02/04/601b73789a1f0.zip","extra":"{\"type\":\"4\",\"guild_id\":\"7430000066660000\",\"code\":\"\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
+// objectName: 4
 class Config {
     ver = 3
+    userv3 = false
     get ver3() {
-        return this.ver === 3
+        return this.ver === 3 || this.userv3
     }
     set ver3(t) {
         if (t === true) this.ver = 3
-        return t
+        return t || this.userv3
     }
     get ver2() {
         return this.ver === 2
@@ -34,8 +43,7 @@ class Config {
     //     return this.ver3 ? this.v3.token = t : this.v2.token = t
     // }
     v2 = {
-        auth: "",
-        token: ""
+        auth: ""
     }
     v3 = {
         token: ""
@@ -105,6 +113,11 @@ class KaiheilaAPI {
         mode: "POST",
         v2: "/guild-roles/revoke/",
         v3: "/guild-role/revoke"
+    }
+    createAsset = {
+        mode: "POST",
+        v2: "/assets",
+        v3: "/asset/create"
     }
 }
 class Guild {
@@ -330,6 +343,14 @@ class Msg {
         else Object.assign(this, r)
     }
 }
+const fileType = new class FileType {
+    image = [
+        "png",
+        "jpg",
+        "jpeg",
+        "gif"
+    ]
+}
 export class KaiheilaWS extends EventEmitter {
     config = new Config()
     #runList = new RList()
@@ -412,16 +433,16 @@ export class KaiheilaWS extends EventEmitter {
                 content,
                 type
             }
-            if(quote!=="") msg.quote = quote
+            if (quote !== "") msg.quote = quote
             request.data = msg
         }
         else {
-            Extra = this.createExtra(channel_id)
+            Extra = this.createExtra(channel_id, type)
             if (typeof quote !== "string") Extra = this.createQuote(channel_id, quote, Extra)
             const contents = { content, extra: Json.stringify(Extra) }
             msg = {
                 content: Json.stringify(contents),
-                objectName: 1,
+                objectName: type,
                 auth: this.#wsRequest.sessionId
             }
             request.url += channel_id + "/message"
@@ -451,11 +472,12 @@ export class KaiheilaWS extends EventEmitter {
             method: this.#api[api].mode,
             url: this.#api.url + ver + this.#api[api][ver],
             headers: {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) kaiheila/0.0.25 Chrome/80.0.3987.158 Electron/8.2.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) kaiheila/0.0.30 Chrome/80.0.3987.158 Electron/8.2.0 Safari/537.36",
                 Referer: "http://localhost:5888/app/discover"
             }
         }
-        if (ver === "v3") request.headers["Authorization"] = "Bot " + this.config.v3.token
+        if (ver === "v3" && !this.config.userv3) request.headers["Authorization"] = "Bot " + this.config.v3.token
+        else if (ver === "v3" && this.config.userv3) request.headers["Authorization"] = this.config.v2.auth
         else request.headers["Cookie"] = "auth=" + this.config.v2.auth
         return request
     }
@@ -499,7 +521,7 @@ export class KaiheilaWS extends EventEmitter {
             return this.#guilds = r.data
         }
     }
-    async setrole(guild_id="", user_id="", role_id=0, mode="Grant") {
+    async setrole(guild_id = "", user_id = "", role_id = 0, mode = "Grant") {
         // const mode = m === true ? "Grant" : "Revoke"
         let request = this.creatRequest("role" + mode)
         if (this.config.ver3) {
@@ -510,6 +532,41 @@ export class KaiheilaWS extends EventEmitter {
             request.url += guild_id
             request.method = "PATCH"
         }
+        await this.#runList.Push()
+        const r = await axios(request)
+        if (this.config.ver3) {
+            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
+            return r.data.data
+        }
+        else {
+            if (!r.data.msgId) return console.error("请求错误：" + r.data)
+            return r.data
+        }
+    }
+    async uploadFile(path = "", channel_id = "") {
+        let request = this.creatRequest("createAsset")
+        request.headers["Content-Type"] = "multipart/form-data"
+        let bodyFormData = new FormData()
+        let binary = fs.readFileSync(path)
+        const file = path.indexOf("/") === -1 ? path.split("\\")[path.split("\\").length - 1] : path.split("/")[path.split("/").length - 1]
+        const { filename, filetype } = returnFileType(file)
+
+        if (this.config.ver3) {
+            bodyFormData.append("file", binary)
+        }
+        else {
+            if (fileType.image.indexOf(filetype) !== -1) {
+                bodyFormData.append("image", binary)
+                bodyFormData.append("type", "image")
+            }
+            else {
+                request.url += "/file"
+                bodyFormData.append("file", binary)
+                bodyFormData.append("filename", file)
+            }
+            if (channel_id !== "") bodyFormData.append("channel_id", channel_id)
+        }
+        request.data = bodyFormData
         await this.#runList.Push()
         const r = await axios(request)
         if (this.config.ver3) {
@@ -541,7 +598,7 @@ export class KaiheilaWS extends EventEmitter {
         }
         return null
     }
-    createExtra(channel_id) {
+    createExtra(channel_id, type) {
         const { guild, channel } = getChannel(channel_id)
         if (!channel) return null
         return {
@@ -557,11 +614,11 @@ export class KaiheilaWS extends EventEmitter {
             code: "",
             guild_id: channel_id,
             mention: [],
-            type: 1
+            type
         }
     }
     createQuote(channel_id, quote, Extra) {
-        if (Extra) Extra = this.createExtra(channel_id)
+        if (Extra===undefined) Extra = this.createExtra(channel_id,1)
         Extra.mention.push(quote.extra.author.id)
         Extra.quote = {
             id: quote.msg_id,

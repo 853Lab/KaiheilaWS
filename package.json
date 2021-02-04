@@ -1,6 +1,6 @@
 {
     "name": "kaiheila-ws",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "description": "开黑啦机器人v2和v3 API的收发SDK，基于ECMAScript",
     "author": "Sonic853 <Sonic853@qq.com> (http://853lab.com)",
     "homepage": "https://github.com/853Lab/KaiheilaWS",
@@ -16,6 +16,7 @@
     "dependencies": {
         "axios": "^0.21.1",
         "events": "^3.2.0",
+        "form-data": "^3.0.0",
         "pako": "^2.0.3",
         "ws": "^7.4.2"
     },
