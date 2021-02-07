@@ -545,23 +545,23 @@ export class KaiheilaWS extends EventEmitter {
     }
     async uploadFile(path = "", channel_id = "") {
         let request = this.creatRequest("createAsset")
-        request.headers["Content-Type"] = "multipart/form-data"
+        // request.headers["Content-Type"] = "multipart/form-data"
         let bodyFormData = new FormData()
-        let binary = fs.readFileSync(path)
+        let stream = fs.createReadStream(path)
         const file = path.indexOf("/") === -1 ? path.split("\\")[path.split("\\").length - 1] : path.split("/")[path.split("/").length - 1]
         const { filename, filetype } = returnFileType(file)
 
         if (this.config.ver3) {
-            bodyFormData.append("file", binary)
+            bodyFormData.append("file", stream)
         }
         else {
             if (fileType.image.indexOf(filetype) !== -1) {
-                bodyFormData.append("image", binary)
+                bodyFormData.append("image", stream)
                 bodyFormData.append("type", "image")
             }
             else {
                 request.url += "/file"
-                bodyFormData.append("file", binary)
+                bodyFormData.append("file", stream)
                 bodyFormData.append("filename", file)
             }
             if (channel_id !== "") bodyFormData.append("channel_id", channel_id)
