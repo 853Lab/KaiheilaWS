@@ -1,5 +1,4 @@
 "use strict"
-// const [{ EventEmitter }, axios, WebSocket, pako, { Json }] = [require('events'), require('axios'), require('ws'), require('pako'), require('./init.js')]
 import { EventEmitter } from 'events'
 import fs from 'fs'
 import FormData from 'form-data'
@@ -7,46 +6,22 @@ import axios from 'axios'
 import WebSocket from 'ws'
 import pako from 'pako'
 import { Json, JtC, RList, randomizator, returnFileType } from './init.js'
-// {"content":"https://img.kaiheila.cn/assets/2021-02/xxxxxxxxxxxxx.png","imageUri":"https://img.kaiheila.cn/assets/2021-02/xxxxxxxxxxxxx.png","extra":"{\"local_id\":\"HxnSf1GUZLspqrxrwxxxxxxx\",\"type\":\"2\",\"code\":\"\",\"guild_id\":\"7430000066660000\",\"image_name\":\"Alea_a2.png\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
-// objectName: 2
-// {"name":"视频20210204114120.mp4","fileType":"video/mp4","size":3636381,"fileUrl":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","width":1920,"height":1080,"duration":11.133333,"content":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","sightUrl":"https://img.kaiheila.cn/attachments/2021-02/04/xxxxxxxxxxxxx.mp4","extra":"{\"type\":\"4\",\"guild_id\":\"7430000066660000\",\"code\":\"\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
-// objectName: 3
-// {"content":"https://img.kaiheila.cn/attachments/2021-02/04/601b73789a1f0.zip","name":"apt-cyg-master.zip","type":"application/x-zip-compressed","size":29099,"fileUrl":"https://img.kaiheila.cn/attachments/2021-02/04/601b73789a1f0.zip","extra":"{\"type\":\"4\",\"guild_id\":\"7430000066660000\",\"code\":\"\",\"author\":{\"identify_num\":\"5748\",\"avatar\":\"https://img.kaiheila.cn/avatars/2021-01/6MNS92B3c90sg0sg.png/icon\",\"username\":\"853\",\"id\":\"3543259271\",\"nickname\":\"853\",\"roles\":[40000]}}"}
-// objectName: 4
 class Config {
-    ver = 3
-    userv3 = false
-    get ver3() {
-        return this.ver === 3 || this.userv3
-    }
-    set ver3(t) {
-        if (t === true) this.ver = 3
-        return t || this.userv3
-    }
-    get ver2() {
-        return this.ver === 2
-    }
-    set ver2(t) {
-        if (t === true) this.ver = 2
-        return t
-    }
-    // get auth() {
-    //     return this.v2.auth
-    // }
-    // set auth(t) {
-    //     return this.v2.auth = t
-    // }
-    // get token() {
-    //     return this.ver3 ? this.v3.token : this.v2.token
-    // }
-    // set token(t) {
-    //     return this.ver3 ? this.v3.token = t : this.v2.token = t
-    // }
-    v2 = {
+    type = "Bot"
+    User = {
         auth: ""
     }
-    v3 = {
+    Bot = {
         token: ""
+    }
+    get isBot() {
+        return this.type === "Bot"
+    }
+    get isUser() {
+        return this.type === "User"
+    }
+    get key() {
+        return this.type === "Bot" ? this.Bot.token : this.User.auth
     }
 }
 class UserInfo {
@@ -71,6 +46,7 @@ class UserInfo {
     mobile_prefix = ""
     mobile_verified = false
     need_guide = false
+    nickname = ""
     online = false
     os = ""
     privacy_game_activity = 0
@@ -80,44 +56,38 @@ class UserInfo {
         color: "",
         text: ""
     }
+    roles = [] // 不是，为什么只是请求个自己的信息，怎么还会有角色组这玩意？而且还是空的？
     username = ""
 }
 class KaiheilaAPI {
     url = "https://kaiheila.cn/api/"
     me = {
         mode: "GET",
-        v2: "/user/user-state",
-        v3: "/user/me"
+        addr: "/user/me"
     }
     gateway = {
         mode: "GET",
-        v2: "/user/user-state",
-        v3: "/gateway/index"
+        addr: "/gateway/index"
     }
-    guild = {
+    guilds = {
         mode: "GET",
-        v2: "/guilds",
-        v3: "/guild"
+        addr: "/guild"
     }
     sendmsg = {
         mode: "POST",
-        v2: "/channels/",
-        v3: "/message/create"
+        addr: "/message/create"
     }
     roleGrant = {
         mode: "POST",
-        v2: "/guild-roles/grant/",
-        v3: "/guild-role/grant"
+        addr: "/guild-role/grant"
     }
     roleRevoke = {
         mode: "POST",
-        v2: "/guild-roles/revoke/",
-        v3: "/guild-role/revoke"
+        addr: "/guild-role/revoke"
     }
     createAsset = {
         mode: "POST",
-        v2: "/assets",
-        v3: "/asset/create"
+        addr: "/asset/create"
     }
 }
 class Guild {
@@ -329,8 +299,8 @@ class Msg {
     nonce = ""
     target_id = ""
     type = 1
-    constructor(r, v2) {
-        if (v2) {
+    constructor(r, user) {
+        if (user) {
             r = Object.assign(r, Json.parse(r.content))
             r.extra = Json.parse(r.extra)
             JtC(this, r)
@@ -354,23 +324,33 @@ const fileType = new class FileType {
 export class KaiheilaWS extends EventEmitter {
     config = new Config()
     #runList = new RList()
-    get ver() {
-        return this.config.ver
-    }
-    set ver(t) {
-        return this.config.ver = t
-    }
     #wsurl = ""
     #api = new KaiheilaAPI()
     #user = new UserInfo()
     #guilds = []
     #wsRequest = new KaiheilaWsRequest()
+    /**
+     * 初始配置，ver和v2、v3、userv3配置已弃用，请改用type、Bot、User配置。
+     * @param {{
+     * type:"User"|"Bot",
+     * Bot:{
+     * token:string,
+     * }
+     * User:{
+     * auth:string,
+     * }
+     * }} config 
+     */
     constructor(config = new Config()) {
         super()
         Object.assign(this.config, config)
     }
+    /**
+     * 开始接通 WebSocket
+     */
     async connect() {
         await this.getGateway()
+        if(!this.#wsurl) return console.log("获取不到 WebSocket URL!")
         this.#wsRequest = new KaiheilaWsRequest()
         this.#wsRequest.ws = new WebSocket(this.#wsurl)
         this.#wsRequest.ws.on("open", e => {
@@ -395,7 +375,7 @@ export class KaiheilaWS extends EventEmitter {
             switch (r.s) {
                 case 0:
                     if (typeof r.sn == "number" && r.sn > this.#wsRequest.sn) this.#wsRequest.sn = r.sn
-                    let msg = new Msg(r.d, this.config.ver2)
+                    let msg = new Msg(r.d, this.config.isUser)
                     this.emit("Message", msg)
                     break
                 case 1:
@@ -425,166 +405,192 @@ export class KaiheilaWS extends EventEmitter {
             else console.log("连接已关闭")
         })
     }
-    async sendmsg(content = "", channel_id = "", quote = "", type = 1) {
-        let [msg, Extra, request] = [{}, {}, this.creatRequest("sendmsg")]
-        if (this.config.ver3) {
-            msg = {
-                channel_id,
-                content,
-                type
-            }
-            if (quote !== "") msg.quote = quote
-            request.data = msg
-        }
-        else {
-            Extra = this.createExtra(channel_id, type)
-            if (typeof quote !== "string") Extra = this.createQuote(channel_id, quote, Extra)
-            const contents = { content, extra: Json.stringify(Extra) }
-            msg = {
-                content: Json.stringify(contents),
-                objectName: type,
-                auth: this.#wsRequest.sessionId
-            }
-            request.url += channel_id + "/message"
-            request.data = msg
-        }
+    /**
+     * 发送消息
+     * @param {string} content 消息内容
+     * @param {string} target_id 目标频道 id
+     * @param {string} quote 回复某条消息的 msgId （可留空）
+     * @param {1|2|3|4|5|6|7|8|9|10} type 消息类型：
+     * 
+     * 1：纯文字
+     * 
+     * 2：图片消息（只能发送由机器人或用户自己上传后的图片URL）
+     * 
+     * 3：视频消息
+     * 
+     * 4：文件消息
+     * 
+     * 9：kmarkdown
+     * 
+     * 10：卡片消息（CardMessage）
+     * @param {string} temp_target_id 用户id，如果传了，代表该消息是临时消息，该消息不会存数据库，但是会在频道内只给该用户推送临时消息。用于在频道内针对用户的操作进行单独的回应通知等。
+     * @returns {Promise<{
+     * msg_id: string,
+     * msg_timestamp: number,
+     * nonce: string
+     * }|undefined>}
+     */
+    async sendmsg(content = "", target_id = "", quote = "", type = 1, temp_target_id) {
+        let [msg, request] = [{
+            target_id,
+            content,
+            type
+        }, this.createAPI("sendmsg")]
+        if (temp_target_id) msg.temp_target_id = temp_target_id
+        if (quote !== "") msg.quote = quote
+        request.data = msg
         await this.#runList.Push()
-        const r = await axios(request)
-        if (this.config.ver3) {
+        try {
+            const r = await axios(request)
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
             return r.data.data
-        }
-        else {
-            if (!r.data.msgId) return console.error("请求错误：" + r.data)
-            return r.data
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
         }
     }
+    /**
+     * 重新连接 WebSocket
+     */
     reconnect() {
         this.#wsRequest.realclose = false
         this.#wsRequest.ws.close()
     }
+    /**
+     * 断开连接 WebSocket
+     */
     disconnect() {
         this.#wsRequest.ws.close()
     }
-    creatRequest(api = "") {
-        const ver = "v" + this.ver
+    /**
+     * 生成基础请求
+     * @param {string} method 请求方式
+     * @param {string} url 请求地址
+     * @returns {{
+     * method: string,
+     * url: string,
+     * headers: {
+     * Authorization:string,
+     * Referer: string,
+     * "User-Agent": string
+     * }}
+     */
+    creatRequest(method = "Get", url = "") {
         let request = {
-            method: this.#api[api].mode,
-            url: this.#api.url + ver + this.#api[api][ver],
+            method,
+            url,
             headers: {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) kaiheila/0.0.30 Chrome/80.0.3987.158 Electron/8.2.0 Safari/537.36",
                 Referer: "http://localhost:5888/app/discover"
             }
         }
-        if (ver === "v3" && !this.config.userv3) request.headers["Authorization"] = "Bot " + this.config.v3.token
-        else if (ver === "v3" && this.config.userv3) request.headers["Authorization"] = this.config.v2.auth
-        else request.headers["Cookie"] = "auth=" + this.config.v2.auth
+        if (this.config.isBot) request.headers["Authorization"] = "Bot " + this.config.Bot.token
+        else request.headers["Authorization"] = this.config.User.auth
         return request
     }
+    /**
+     * 生成api请求
+     * @param {string} api 指定api
+     * @returns {{
+     * method: string,
+     * url: string,
+     * headers: {
+     * Authorization:string,
+     * Referer: string,
+     * "User-Agent": string
+     * }}
+     */
+    createAPI(api = "") {
+        return this.creatRequest(this.#api[api].mode, this.#api.url + "v3" + this.#api[api].addr)
+    }
+    /**
+     * 获取自身信息
+     * @returns {Promise<UserInfo>}
+     */
     async getme() {
         await this.#runList.Push()
-        const r = await axios(this.creatRequest("me"))
-        if (this.config.ver3) {
+        try {
+            const r = await axios(this.createAPI("me"))
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
             Object.assign(this.#user, r.data.data)
             return this.#user
-        }
-        else {
-            if (!r.data.user) return console.error("请求错误：" + r.data)
-            Object.assign(this.#user, r.data.user)
-            return this.#user
-        }
-    }
-    async getGateway() {
-        console.log("获取连接信息")
-        await this.#runList.Push()
-        const r = await axios(this.creatRequest("gateway"))
-        if (this.config.ver3) {
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return this.#wsurl = r.data.data.url
-        }
-        else {
-            if (!r.data.proxy_url) return console.error("请求错误：" + r.data)
-            Object.assign(this.#user, r.data.user)
-            return this.#wsurl = r.data.proxy_url
-        }
-    }
-    async getGuild() {
-        await this.#runList.Push()
-        const r = await axios(this.creatRequest("guild"))
-        if (this.config.ver3) {
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return this.#guilds = r.data.data
-        }
-        else {
-            if (r.data.code) return console.error("请求错误：" + r.data)
-            return this.#guilds = r.data
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
         }
     }
     /**
-     * 
-     * @param {string} guild_id 
-     * @param {string} user_id 
-     * @param {number} role_id 
-     * @param {"Grant"|"Revoke"} mode 
-     * @returns 
+     * 获取连接 WebSocket 的 url
+     * @returns {Promise<string|undefined>}
      */
-    async setrole(guild_id = "", user_id = "", role_id = 0, mode = "Grant") {
-        // const mode = m === true ? "Grant" : "Revoke"
-        let request = this.creatRequest("role" + mode)
-        if (this.config.ver3) {
-            request.data = { guild_id, user_id, role_id }
-        }
-        else {
-            request.data = { user_id, role_id }
-            request.url += guild_id
-            request.method = "PATCH"
-        }
+    async getGateway() {
+        console.log("获取连接信息")
         await this.#runList.Push()
-        const r = await axios(request)
-        if (this.config.ver3) {
+        try {
+            const r = await axios(this.createAPI("gateway"))
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return r.data.data
-        }
-        else {
-            if (!r.data.msgId) return console.error("请求错误：" + r.data)
-            return r.data
+            return this.#wsurl = r.data.data.url
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
         }
     }
-    async uploadFile(path = "", channel_id = "") {
-        let request = this.creatRequest("createAsset")
-        // request.headers["Content-Type"] = "multipart/form-data"
+    /**
+     * 获取所有服务器的详细信息（谨慎使用）
+     * @returns {Promise<[Guild]|undefined>}
+     */
+    async getGuilds() {
+        await this.#runList.Push()
+        try {
+            const r = await axios(this.createAPI("guild"))
+            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
+            return this.#guilds = r.data.data
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
+        }
+    }
+    /**
+     * 给予或移除指定用户在某个服务器的角色组
+     * @param {string} guild_id 服务器ID
+     * @param {string} user_id 用户ID
+     * @param {number} role_id 角色组ID
+     * @param {"Grant"|"Revoke"} mode 模式，Grant为给予，Revoke为移除。
+     * @returns {Promise<{
+     * user_id: string,
+     * guild_id: string,
+     * roles: Array
+     * }|undefined>} 返回成功后的结果或undefined
+     */
+    async setrole(guild_id = "", user_id = "", role_id = 0, mode = "Grant") {
+        let request = this.createAPI("role" + mode)
+        request.data = { guild_id, user_id, role_id }
+        await this.#runList.Push()
+        try {
+            const r = await axios(request)
+            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
+            return r.data.data
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
+        }
+    }
+    /**
+     * 上传文件
+     * @param {string} path 文件路径（不可以传文件夹！！！）
+     * @returns {Promise<{url:string}|undefined>}
+     */
+    async uploadFile(path = "") {
+        let request = this.createAPI("createAsset")
         let bodyFormData = new FormData()
         let stream = fs.createReadStream(path)
-        const file = path.indexOf("/") === -1 ? path.split("\\")[path.split("\\").length - 1] : path.split("/")[path.split("/").length - 1]
-        const { filename, filetype } = returnFileType(file)
-
-        if (this.config.ver3) {
-            bodyFormData.append("file", stream)
-        }
-        else {
-            if (fileType.image.indexOf(filetype) !== -1) {
-                bodyFormData.append("image", stream)
-                bodyFormData.append("type", "image")
-            }
-            else {
-                request.url += "/file"
-                bodyFormData.append("file", stream)
-                bodyFormData.append("filename", file)
-            }
-            if (channel_id !== "") bodyFormData.append("channel_id", channel_id)
-        }
+        // const file = path.indexOf("/") === -1 ? path.split("\\")[path.split("\\").length - 1] : path.split("/")[path.split("/").length - 1]
+        // const { filename, filetype } = returnFileType(file)
+        bodyFormData.append("file", stream)
         request.headers["content-type"] = bodyFormData.getHeaders()["content-type"]
         request.data = bodyFormData
         await this.#runList.Push()
-        const r = await axios(request)
-        if (this.config.ver3) {
+        try {
+            const r = await axios(request)
             if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
             return r.data.data
-        }
-        else {
-            if (!r.data.msgId) return console.error("请求错误：" + r.data)
-            return r.data
+        } catch (error) {
+            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
         }
     }
     getChannel(channel_id) {
@@ -606,48 +612,5 @@ export class KaiheilaWS extends EventEmitter {
             }
         }
         return null
-    }
-    createExtra(channel_id, type) {
-        const { guild, channel } = getChannel(channel_id)
-        if (!channel) return null
-        return {
-            author: {
-                avatar: this.#user.avatar,
-                id: this.#user.id,
-                identify_num: this.#user.identify_num,
-                nickname: guild.my_nickname,
-                roles: guild.my_roles,
-                username: this.#user.username
-            },
-            channel_name: channel.name,
-            code: "",
-            guild_id: channel_id,
-            mention: [],
-            type
-        }
-    }
-    createQuote(channel_id, quote, Extra) {
-        if (Extra===undefined) Extra = this.createExtra(channel_id,1)
-        Extra.mention.push(quote.extra.author.id)
-        Extra.quote = {
-            id: quote.msg_id,
-            rong_id: quote.msg_id,
-            type: quote.type,
-            content: quote.content,
-            create_at: quote.msg_timestamp,
-            msgId: quote.msg_id,
-            code: "",
-            author: {
-                id: quote.extra.author.id,
-                username: quote.extra.author.username,
-                identify_num: quote.extra.author.identify_num,
-                online: true,
-                os: "Websocket",
-                avatar: quote.extra.author.avatar,
-                nickname: quote.extra.author.nickname,
-                roles: quote.extra.author.roles
-            }
-        }
-        return Extra
     }
 }
