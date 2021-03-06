@@ -102,7 +102,7 @@ class KaiheilaAPI {
     sendmsg = {
         mode: "POST",
         v2: "/channels/",
-        v3: "/channel/message"
+        v3: "/message/create"
     }
     roleGrant = {
         mode: "POST",
@@ -521,6 +521,14 @@ export class KaiheilaWS extends EventEmitter {
             return this.#guilds = r.data
         }
     }
+    /**
+     * 
+     * @param {string} guild_id 
+     * @param {string} user_id 
+     * @param {number} role_id 
+     * @param {"Grant"|"Revoke"} mode 
+     * @returns 
+     */
     async setrole(guild_id = "", user_id = "", role_id = 0, mode = "Grant") {
         // const mode = m === true ? "Grant" : "Revoke"
         let request = this.creatRequest("role" + mode)
@@ -566,6 +574,7 @@ export class KaiheilaWS extends EventEmitter {
             }
             if (channel_id !== "") bodyFormData.append("channel_id", channel_id)
         }
+        request.headers["content-type"] = bodyFormData.getHeaders()["content-type"]
         request.data = bodyFormData
         await this.#runList.Push()
         const r = await axios(request)
@@ -642,16 +651,3 @@ export class KaiheilaWS extends EventEmitter {
         return Extra
     }
 }
-// import { KaiheilaWS } from './index.js'
-// let kaiheiws = new KaiheilaWS({
-//     ver: 3,
-//     v2: {
-//         auth: "",
-//         token: ""
-//     },
-//     v3: {
-//         token: ""
-//     }
-// })
-// kaiheiws.on("Message", r => { console.log(r) })
-// kaiheiws.connect()
