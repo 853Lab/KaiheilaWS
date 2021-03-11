@@ -14,6 +14,7 @@ class Config {
     Bot = {
         token: ""
     }
+    RequestTime = 500
     get isBot() {
         return this.type === "Bot"
     }
@@ -24,7 +25,7 @@ class Config {
         return this.type === "Bot" ? this.Bot.token : this.User.auth
     }
 }
-class UserInfo {
+export class UserInfo {
     accompaniment = false
     audio_setting = ""
     auth_info = []
@@ -59,7 +60,7 @@ class UserInfo {
     roles = [] // 不是，为什么只是请求个自己的信息，怎么还会有角色组这玩意？而且还是空的？
     username = ""
 }
-class KaiheilaAPI {
+export class KaiheilaAPI {
     url = "https://kaiheila.cn/api/"
     me = {
         mode: "GET",
@@ -68,10 +69,6 @@ class KaiheilaAPI {
     gateway = {
         mode: "GET",
         addr: "/gateway/index"
-    }
-    guilds = {
-        mode: "GET",
-        addr: "/guild"
     }
     sendmsg = {
         mode: "POST",
@@ -89,8 +86,48 @@ class KaiheilaAPI {
         mode: "POST",
         addr: "/asset/create"
     }
+    guilds = {
+        mode: "GET",
+        addr: "/guild"
+    }
+    guildList = {
+        mode: "GET",
+        addr: "/guild/list"
+    }
+    guild = {
+        mode: "GET",
+        addr: "/guild/view"
+    }
+    guildUserList = {
+        mode: "POST",
+        addr: "/guild/user-list"
+    }
+    guildNickname = {
+        mode: "POST",
+        addr: "/guild/nickname"
+    }
+    guildLeave = {
+        mode: "POST",
+        addr: "/guild/leave"
+    }
+    guildKickout = {
+        mode: "POST",
+        addr: "/guild/kickout"
+    }
+    guildMuteList = {
+        mode: "GET",
+        addr: "/guild-mute/list"
+    }
+    guildMuteCreate = {
+        mode: "POST",
+        addr: "/guild-mute/create"
+    }
+    guildMuteDelete = {
+        mode: "POST",
+        addr: "/guild-mute/delete"
+    }
 }
-class Guild {
+export class Guild {
     id = ""
     name = ""
     topic = ""
@@ -248,6 +285,88 @@ class Guild {
         "tag": ""
     }
 }
+export class GuildList {
+    items = [
+        {
+            id: "xxx",
+            name: "test",
+            topic: "",
+            master_id: "xxx",
+            icon: "",
+            invite_enabled: 1,
+            notify_type: 2,
+            region: "beijing",
+            enable_open: 0,
+            open_id: "0",
+            default_channel_id: "xxx",
+            welcome_channel_id: "xxx"
+        }
+    ]
+    meta = {
+        page: 1,
+        page_total: 1,
+        page_size: 100,
+        total: 2
+    }
+    sort = {
+        id: 1
+    }
+}
+export class GuildView {
+    id = "91686000000"
+    name = "Hello"
+    topic = ""
+    master_id = "17000000"
+    is_master = false
+    icon = ""
+    invite_enabled = true
+    notify_type = 2
+    region = "beijing"
+    enable_open = true
+    open_id = "1600000"
+    default_channel_id = "2710000000"
+    welcome_channel_id = "0"
+    features = []
+    roles = [
+        {
+            role_id: 0,
+            name: "@全体成员",
+            color: 0,
+            position: 999,
+            hoist: 0,
+            mentionable: 0,
+            permissions: 148691464
+        }
+    ]
+    channels = [
+        {
+            id: "37090000000",
+            user_id: "1780000000",
+            parent_id: "0",
+            name: "Hello World",
+            type: 1,
+            level: 100,
+            limit_amount: 0,
+            is_category: false,
+            is_readonly: false,
+            is_private: false
+        }
+    ]
+    emojis = [
+        {
+            name: "ceeb65XXXXXXX0j60jpwfu",
+            id: "9168XXXXX53/4c43fcb7XXXXX0c80ck"
+        }
+    ]
+    user_config = {
+        notify_type: null,
+        nickname: "XX",
+        role_ids: [
+            702
+        ],
+        chat_setting: "1"
+    }
+}
 class KaiheilaWsRequest {
     ws
     realclose = true
@@ -289,7 +408,7 @@ class KaiheilaWsRequest {
         this.wsInterval = setTimeout(() => { this.sendheartbeat() }, time)
     }
 }
-class Msg {
+export class Msg {
     author_id = ""
     channel_type = ""
     content = ""
@@ -335,22 +454,24 @@ export class KaiheilaWS extends EventEmitter {
      * type:"User"|"Bot",
      * Bot:{
      * token:string,
-     * }
+     * },
      * User:{
      * auth:string,
-     * }
+     * },
+     * RequestTime:500
      * }} config 
      */
     constructor(config = new Config()) {
         super()
         Object.assign(this.config, config)
+        this.#runList.time = this.config.RequestTime
     }
     /**
      * 开始接通 WebSocket
      */
     async connect() {
         await this.getGateway()
-        if(!this.#wsurl) return console.log("获取不到 WebSocket URL!")
+        if (!this.#wsurl) return console.log("获取不到 WebSocket URL!")
         this.#wsRequest = new KaiheilaWsRequest()
         this.#wsRequest.ws = new WebSocket(this.#wsurl)
         this.#wsRequest.ws.on("open", e => {
@@ -456,7 +577,7 @@ export class KaiheilaWS extends EventEmitter {
         this.#wsRequest.ws.close()
     }
     /**
-     * 断开连接 WebSocket
+     * 断开 WebSocket 连接
      */
     disconnect() {
         this.#wsRequest.ws.close()
@@ -466,12 +587,12 @@ export class KaiheilaWS extends EventEmitter {
      * @param {string} method 请求方式
      * @param {string} url 请求地址
      * @returns {{
-     * method: string,
-     * url: string,
-     * headers: {
-     * Authorization:string,
-     * Referer: string,
-     * "User-Agent": string
+     *  method: string,
+     *  url: string,
+     *  headers: {
+     *      Authorization:string,
+     *      Referer: string,
+     *      "User-Agent": string
      * }}
      */
     creatRequest(method = "Get", url = "") {
@@ -489,33 +610,32 @@ export class KaiheilaWS extends EventEmitter {
     }
     /**
      * 生成api请求
-     * @param {string} api 指定api
+     * @param {{
+     *  mode:string,
+     *  addr:string
+     * }} api 指定api
      * @returns {{
-     * method: string,
-     * url: string,
-     * headers: {
-     * Authorization:string,
-     * Referer: string,
-     * "User-Agent": string
-     * }}
+     *  method: string,
+     *  url: string,
+     *  headers: {
+     *      Authorization:string,
+     *      Referer: string,
+     *      "User-Agent": string
+     *  },
+     *  data:{}}
      */
-    createAPI(api = "") {
-        return this.creatRequest(this.#api[api].mode, this.#api.url + "v3" + this.#api[api].addr)
+    createAPI({ mode = "", addr = "" }) {
+        return this.creatRequest(mode, this.#api.url + "v3" + addr)
     }
     /**
      * 获取自身信息
      * @returns {Promise<UserInfo>}
      */
     async getme() {
-        await this.#runList.Push()
-        try {
-            const r = await axios(this.createAPI("me"))
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            Object.assign(this.#user, r.data.data)
-            return this.#user
-        } catch (error) {
-            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
-        }
+        const r = await this.sendRequest(this.createAPI(this.#api.me))
+        if (!r) return
+        Object.assign(this.#user, r)
+        return this.#user
     }
     /**
      * 获取连接 WebSocket 的 url
@@ -523,28 +643,66 @@ export class KaiheilaWS extends EventEmitter {
      */
     async getGateway() {
         console.log("获取连接信息")
-        await this.#runList.Push()
-        try {
-            const r = await axios(this.createAPI("gateway"))
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return this.#wsurl = r.data.data.url
-        } catch (error) {
-            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
-        }
+        const r = await this.sendRequest(this.createAPI(this.#api.gateway))
+        if (!r) return
+        return this.#wsurl = r.url
     }
     /**
      * 获取所有服务器的详细信息（谨慎使用）
      * @returns {Promise<[Guild]|undefined>}
      */
     async getGuilds() {
-        await this.#runList.Push()
-        try {
-            const r = await axios(this.createAPI("guild"))
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return this.#guilds = r.data.data
-        } catch (error) {
-            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
-        }
+        const r = await this.sendRequest(this.createAPI(this.#api.guilds))
+        if (!r) return
+        return this.#guilds = r
+    }
+    /**
+     * 获取最多为100个的服务器列表
+     * @returns {Promise<GuildList>}
+     */
+    async getGuildList() {
+        const r = await this.sendRequest(this.createAPI(this.#api.guildList))
+        if (!r) return
+        return r
+    }
+    /**
+     * 获取单个服务器信息
+     * @param {string} guild_id 服务器ID
+     * @returns {Promise<GuildView>}
+     */
+    async getGuild(guild_id = "") {
+        if (!guild_id) return console.log("guild_id不能为空！")
+        let request = this.createAPI(this.#api.guild)
+        request.data = { guild_id }
+        const r = await this.sendRequest(this.createAPI(request))
+        if (!r) return
+        return r
+    }
+    /**
+     * 删除服务器静音或闭麦
+     * @param {string} guild_id 服务器ID
+     * @param {string} user_id 用户ID
+     * @param {"1"|"2"} type 
+     * @returns {Promise<[]>}
+     */
+    async guildMuteDelete(guild_id = "", user_id = "", type = "") {
+        if (!guild_id) return console.log("guild_id不能为空！")
+        let request = this.createAPI(this.#api.guildMuteDelete)
+        request.data = { guild_id, user_id, type }
+        const r = await this.sendRequest(this.createAPI(request))
+        if (!r) return
+        return r
+    }
+    /**
+     * 离开指定服务器
+     * @param {string} guild_id 服务器ID
+     * @returns {Promise<[]>}
+     */
+    async leaveGuild(guild_id = "") {
+        let request = this.createAPI(this.#api.guildLeave)
+        request.data = { guild_id }
+        const r = await this.sendRequest(request)
+        return r
     }
     /**
      * 给予或移除指定用户在某个服务器的角色组
@@ -553,22 +711,16 @@ export class KaiheilaWS extends EventEmitter {
      * @param {number} role_id 角色组ID
      * @param {"Grant"|"Revoke"} mode 模式，Grant为给予，Revoke为移除。
      * @returns {Promise<{
-     * user_id: string,
-     * guild_id: string,
-     * roles: Array
+     *  user_id: string,
+     *  guild_id: string,
+     *  roles: Array
      * }|undefined>} 返回成功后的结果或undefined
      */
     async setrole(guild_id = "", user_id = "", role_id = 0, mode = "Grant") {
-        let request = this.createAPI("role" + mode)
+        let request = this.createAPI(this.#api["role" + mode])
         request.data = { guild_id, user_id, role_id }
-        await this.#runList.Push()
-        try {
-            const r = await axios(request)
-            if (r.data.code !== 0) return console.error("错误码：" + r.data.code + "，错误信息：" + r.data.message)
-            return r.data.data
-        } catch (error) {
-            return console.error(`错误码：${error.response.data.code}，错误信息：${error.response.data.message}`)
-        }
+        const r = await this.sendRequest(request)
+        return r
     }
     /**
      * 上传文件
@@ -576,7 +728,7 @@ export class KaiheilaWS extends EventEmitter {
      * @returns {Promise<{url:string}|undefined>}
      */
     async uploadFile(path = "") {
-        let request = this.createAPI("createAsset")
+        let request = this.createAPI(this.#api.createAsset)
         let bodyFormData = new FormData()
         let stream = fs.createReadStream(path)
         // const file = path.indexOf("/") === -1 ? path.split("\\")[path.split("\\").length - 1] : path.split("/")[path.split("/").length - 1]
@@ -584,6 +736,23 @@ export class KaiheilaWS extends EventEmitter {
         bodyFormData.append("file", stream)
         request.headers["content-type"] = bodyFormData.getHeaders()["content-type"]
         request.data = bodyFormData
+        const r = await this.sendRequest(request)
+        return r
+    }
+    /**
+     * 发送请求
+     * @param {{
+     *  method: string,
+     *  url: string,
+     *  headers: {
+     *      Authorization:string,
+     *      Referer: string,
+     *      "User-Agent": string
+     * }} request 
+     * @returns {Promise<{}>}
+     */
+    async sendRequest(request) {
+        if (!request) return console.log("无法发送空请求！")
         await this.#runList.Push()
         try {
             const r = await axios(request)
