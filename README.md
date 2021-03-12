@@ -47,7 +47,7 @@ kaiheiws.getme().then(r=>{console.log(r)})
 
 ### 接收机器人已加入的服务器：
 ```JavaScript
-kaiheiws.getGuild().then(r=>{console.log(r)})
+kaiheiws.getGuilds().then(r=>{console.log(r)})
 ```
 
 ### 给予、移除用户对应的角色：

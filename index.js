@@ -556,7 +556,7 @@ export class KaiheilaWS extends EventEmitter {
             target_id,
             content,
             type
-        }, this.createAPI("sendmsg")]
+        }, this.createAPI(this.#api.sendmsg)]
         if (temp_target_id) msg.temp_target_id = temp_target_id
         if (quote !== "") msg.quote = quote
         request.data = msg
