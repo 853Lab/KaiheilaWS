@@ -61,7 +61,7 @@ export class UserInfo {
     username = ""
 }
 export class KaiheilaAPI {
-    url = "https://kaiheila.cn/api/"
+    url = "https://www.kaiheila.cn/api/"
     me = {
         mode: "GET",
         addr: "/user/me"
@@ -584,7 +584,7 @@ export class KaiheilaWS extends EventEmitter {
     }
     /**
      * 生成基础请求
-     * @param {string} method 请求方式
+     * @param {"GET"|"POST"|"PUT"|"DELETE"|"OPTIONS"|"HEAD"} method 请求方式
      * @param {string} url 请求地址
      * @returns {{
      *  method: string,
@@ -595,7 +595,7 @@ export class KaiheilaWS extends EventEmitter {
      *      "User-Agent": string
      * }}
      */
-    creatRequest(method = "Get", url = "") {
+    creatRequest(method = "GET", url = "") {
         let request = {
             method,
             url,
@@ -679,21 +679,6 @@ export class KaiheilaWS extends EventEmitter {
         return r
     }
     /**
-     * 删除服务器静音或闭麦
-     * @param {string} guild_id 服务器ID
-     * @param {string} user_id 用户ID
-     * @param {"1"|"2"} type 
-     * @returns {Promise<[]>}
-     */
-    async guildMuteDelete(guild_id = "", user_id = "", type = "") {
-        if (!guild_id) return console.log("guild_id不能为空！")
-        let request = this.createAPI(this.#api.guildMuteDelete)
-        request.data = { guild_id, user_id, type }
-        const r = await this.sendRequest(this.createAPI(request))
-        if (!r) return
-        return r
-    }
-    /**
      * 离开指定服务器
      * @param {string} guild_id 服务器ID
      * @returns {Promise<[]>}
@@ -701,6 +686,18 @@ export class KaiheilaWS extends EventEmitter {
     async leaveGuild(guild_id = "") {
         let request = this.createAPI(this.#api.guildLeave)
         request.data = { guild_id }
+        const r = await this.sendRequest(request)
+        return r
+    }
+    /**
+     * 将指定用户踢出服务器
+     * @param {string} guild_id 服务器ID
+     * @param {string} target_id 服务器ID
+     * @returns {Promise<[]>}
+     */
+    async kickOutGuild(guild_id = "", target_id = "") {
+        let request = this.createAPI(this.#api.guildKickout)
+        request.data = { guild_id, target_id }
         const r = await this.sendRequest(request)
         return r
     }
@@ -720,6 +717,21 @@ export class KaiheilaWS extends EventEmitter {
         let request = this.createAPI(this.#api["role" + mode])
         request.data = { guild_id, user_id, role_id }
         const r = await this.sendRequest(request)
+        return r
+    }
+    /**
+     * 删除服务器静音或闭麦
+     * @param {string} guild_id 服务器ID
+     * @param {string} user_id 用户ID
+     * @param {"1"|"2"} type 
+     * @returns {Promise<[]>}
+     */
+    async guildMuteDelete(guild_id = "", user_id = "", type = "") {
+        if (!guild_id) return console.log("guild_id不能为空！")
+        let request = this.createAPI(this.#api.guildMuteDelete)
+        request.data = { guild_id, user_id, type }
+        const r = await this.sendRequest(this.createAPI(request))
+        if (!r) return
         return r
     }
     /**
