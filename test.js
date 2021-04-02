@@ -3,7 +3,8 @@ let kaiheiws = new KaiheilaWS({
     type:"Bot",
     Bot: {
         token: ""
-    }
+    },
+    retry: true
 })
 kaiheiws.on("Message", r => { console.log(r) })
 kaiheiws.connect()

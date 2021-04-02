@@ -7,6 +7,9 @@ import WebSocket from 'ws'
 import pako from 'pako'
 import { Json, JtC, RList, randomizator, returnFileType } from './init.js'
 class Config {
+    /**
+     * @type {"Bot"|"User"}
+     */
     type = "Bot"
     User = {
         auth: ""
@@ -15,6 +18,7 @@ class Config {
         token: ""
     }
     RequestTime = 500
+    retry = true
     get isBot() {
         return this.type === "Bot"
     }
@@ -446,8 +450,14 @@ export class KaiheilaWS extends EventEmitter {
     #wsurl = ""
     #api = new KaiheilaAPI()
     #user = new UserInfo()
+    /**
+     * @type {[Guild]}
+     */
     #guilds = []
-    #wsRequest = new KaiheilaWsRequest()
+    /**
+     * @type {KaiheilaWsRequest}
+     */
+    #wsRequest
     /**
      * 初始配置，ver和v2、v3、userv3配置已弃用，请改用type、Bot、User配置。
      * @param {{
@@ -458,10 +468,11 @@ export class KaiheilaWS extends EventEmitter {
      * User:{
      * auth:string,
      * },
-     * RequestTime:500
+     * RequestTime:500,
+     * retry:boolean
      * }} config 
      */
-    constructor(config = new Config()) {
+    constructor(config) {
         super()
         Object.assign(this.config, config)
         this.#runList.time = this.config.RequestTime
@@ -473,6 +484,7 @@ export class KaiheilaWS extends EventEmitter {
         await this.getGateway()
         if (!this.#wsurl) return console.log("获取不到 WebSocket URL!")
         this.#wsRequest = new KaiheilaWsRequest()
+        this.#wsRequest.realclose = !this.config.retry
         this.#wsRequest.ws = new WebSocket(this.#wsurl)
         this.#wsRequest.ws.on("open", e => {
             console.log("连接已打开")
@@ -587,8 +599,8 @@ export class KaiheilaWS extends EventEmitter {
      * @param {"GET"|"POST"|"PUT"|"DELETE"|"OPTIONS"|"HEAD"} method 请求方式
      * @param {string} url 请求地址
      * @returns {{
-     *  method: string,
-     *  url: string,
+     *  method: method,
+     *  url: url,
      *  headers: {
      *      Authorization:string,
      *      Referer: string,
@@ -639,12 +651,15 @@ export class KaiheilaWS extends EventEmitter {
     }
     /**
      * 获取连接 WebSocket 的 url
-     * @returns {Promise<string|undefined>}
+     * @returns {Promise<string>}
      */
     async getGateway() {
         console.log("获取连接信息")
+        /**
+         * @type {{url:string}}
+         */
         const r = await this.sendRequest(this.createAPI(this.#api.gateway))
-        if (!r) return
+        if (!r) return this.#wsurl = ""
         return this.#wsurl = r.url
     }
     /**
